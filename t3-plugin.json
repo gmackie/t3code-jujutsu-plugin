@@ -30,6 +30,7 @@
   },
   "capabilities": [
     { "kind": "filesystem.read", "roots": ["project.root"] },
+    { "kind": "filesystem.write", "roots": ["project.root"] },
     { "kind": "ui.embed", "surfaces": ["project", "thread.sidePanel"] }
   ]
 }

@@ -1,5 +1,5 @@
 import { describe, expect, test } from "bun:test";
-import { buildJjSurfaceModel, createJjClient, normalizeJjSnapshot } from "./jj.ts";
+import { buildJjSurfaceModel, createBuiltinJjClient, createJjClient, normalizeJjSnapshot } from "./jj.ts";
 
 const raw = {
   repoRoot: "/work/project",
@@ -39,5 +39,22 @@ describe("Jujutsu adapter", () => {
     } });
     await expect(client.snapshot()).resolves.toMatchObject({ repoRoot: "/work/project" });
     expect(commands).toEqual([["jj_t3_snapshot", "--root", "/work/project", "--json"]]);
+  });
+
+  test("collects a snapshot from native JJ commands", async () => {
+    const commands: string[][] = [];
+    const client = createBuiltinJjClient({ projectRoot: "/work/project", run: async (command) => {
+      commands.push([...command]);
+      const name = command[1];
+      if (name === "root") return "/work/project\n";
+      if (name === "status") return "Working copy  (@) : zzyy abc123 Draft feature\nWorking copy changes:\nA README.md\n";
+      if (name === "log") return "@  zzyy abc123 Draft feature\n○  xxww def456 Base\n";
+      if (name === "op") return "@ op-1 commit by Mackie at 2026-08-12T12:00:00Z\n";
+      if (name === "bookmark") return "feature: zzyy\nmain: xxww\n";
+      if (name === "workspace") return "default: zzyy /work/project\n";
+      throw new Error(`unexpected command: ${command.join(" ")}`);
+    } });
+    await expect(client.snapshot()).resolves.toMatchObject({ repoRoot: "/work/project", changes: expect.arrayContaining([expect.objectContaining({ changeId: "zzyy", isWorkingCopy: true })]), bookmarks: expect.arrayContaining([{ name: "feature", target: "zzyy" }]) });
+    expect(commands.map((command) => command[1])).toEqual(["root", "status", "log", "op", "bookmark", "workspace"]);
   });
 });

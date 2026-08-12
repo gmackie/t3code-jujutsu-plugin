@@ -17,4 +17,18 @@ describe("Jujutsu RPC", () => {
     await expect(handler("panel.get", { panelId: "jujutsu.operation-log" })).resolves.toMatchObject({ ok: true, result: { content: { kind: "operation-log", operations: detailed.operations } } });
     await expect(handler("panel.get", { panelId: "jujutsu.bookmarks" })).resolves.toMatchObject({ ok: true, result: { content: { kind: "bookmarks", bookmarks: detailed.bookmarks } } });
   });
+
+  test("denies JJ mutations unless explicitly granted", async () => {
+    const calls: Array<readonly string[]> = [];
+    const handler = createRpcHandler({ snapshot, refresh: async () => snapshot, mutate: async (input) => { calls.push(input.command); return { status: "ok" }; } });
+    await expect(handler("action.execute", { actionId: "describe", input: { message: "Draft" } })).resolves.toMatchObject({ ok: false, error: expect.stringContaining("capability") });
+    expect(calls).toEqual([]);
+  });
+
+  test("runs an explicitly approved JJ mutation", async () => {
+    const calls: Array<readonly string[]> = [];
+    const handler = createRpcHandler({ snapshot, refresh: async () => snapshot, mutationCapabilityGranted: true, mutate: async (input) => { calls.push(input.command); return { status: "ok" }; } });
+    await expect(handler("action.execute", { actionId: "describe", input: { message: "Draft" } })).resolves.toMatchObject({ ok: true, result: { status: "ok" } });
+    expect(calls).toEqual([["describe", "-m", "Draft"]]);
+  });
 });

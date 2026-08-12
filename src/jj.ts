@@ -7,6 +7,7 @@ export type JjSnapshot = { repoRoot: string | null; workingCopy: JjWorkingCopy |
 export type JjSurfaceCard = { kind: "metric" | "list" | "notice"; id: string; title: string; value?: string; message?: string; status?: "neutral" | "positive" | "warning" | "negative"; items?: readonly { id: string; title: string; detail?: string; status?: "neutral" | "positive" | "warning" | "negative" }[] };
 export type JjSurfaceModel = { pluginId: string; navigationId: string; title: string; refreshedAt: string; cards: readonly JjSurfaceCard[] };
 export type CommandRunner = (command: readonly string[]) => Promise<unknown>;
+export type JjMutationInput = { command: readonly string[] };
 
 function string(value: unknown, fallback = ""): string { return typeof value === "string" ? value : fallback; }
 function boolean(value: unknown, fallback = false): boolean { return typeof value === "boolean" ? value : fallback; }
@@ -46,3 +47,43 @@ export function buildJjSurfaceModel(snapshot: JjSnapshot, navigationId = "jujuts
 }
 
 export function createJjClient(input: { projectRoot: string; run: CommandRunner }) { return { async snapshot() { return normalizeJjSnapshot(await input.run(["jj_t3_snapshot", "--root", input.projectRoot, "--json"])); } }; }
+
+function command(projectRoot: string, args: readonly string[]): readonly string[] { return ["jj", ...args, "--repository", projectRoot, "--no-pager", "--color", "never"]; }
+function parseChangeGraph(output: string): readonly JjChange[] {
+  return output.split("\n").map((line): JjChange | null => {
+    if (line.includes("\t")) {
+      const tabbed = line.replace(/^(?:[@○◆◉]\s+)?/, "").split("\t");
+      if (tabbed.length >= 2 && tabbed[0] && tabbed[1]) return { changeId: tabbed[0], commitId: tabbed[1], description: tabbed[2]?.trim() || "(no description)", author: tabbed[3]?.trim() || "Unknown author", bookmarks: [], conflict: line.includes("conflict"), isWorkingCopy: line.trimStart().startsWith("@") };
+    }
+    const match = /^(?:(?<marker>[@○◆◉])\s+)?(?<change>\S+)\s+(?<commit>\S+)\s+(?<description>[^\t]*)(?:\t(?<author>.*))?$/.exec(line.trim());
+    if (!match?.groups) return null;
+    return { changeId: match.groups.change, commitId: match.groups.commit, description: match.groups.description.trim() || "(no description)", author: match.groups.author?.trim() || "Unknown author", bookmarks: [], conflict: line.includes("conflict"), isWorkingCopy: match.groups.marker === "@" } satisfies JjChange;
+  }).filter((change): change is JjChange => change !== null);
+}
+function parseOperations(output: string): readonly JjOperation[] {
+  return output.split("\n").map((line) => {
+    const tabbed = /^(?:[@○]\s+)?(?<id>\S+)\t(?<description>[^\t]*)\t(?<user>[^\t]*)\t(?<timestamp>.*)$/.exec(line.trim());
+    if (tabbed?.groups) return { id: tabbed.groups.id, description: tabbed.groups.description || "(unknown operation)", user: tabbed.groups.user || "Unknown user", timestamp: tabbed.groups.timestamp };
+    const match = /^(?:[@○]\s+)?(?<id>\S+)\s+(?<description>.+?)\s+(?:by\s+)?(?<user>[^\t]+?)(?:\s+at\s+|\t)(?<timestamp>.+)?$/.exec(line.trim());
+    return match?.groups ? { id: match.groups.id, description: match.groups.description, user: match.groups.user, timestamp: match.groups.timestamp ?? "" } : null;
+  }).filter((operation): operation is JjOperation => operation !== null);
+}
+function parseBookmarks(output: string): readonly JjBookmark[] {
+  return output.split("\n").map((line) => { const match = /^(?<name>[^:]+):\s+(?<target>\S+)/.exec(line.trim()); return match?.groups ? { name: match.groups.name, target: match.groups.target } : null; }).filter((bookmark): bookmark is JjBookmark => bookmark !== null);
+}
+function parseWorkspaces(output: string, repoRoot: string): readonly JjWorkspace[] {
+  return output.split("\n").map((line) => { const match = /^(?<name>[^:]+):\s+(?<revision>\S+)(?:\s+(?<detail>.*))?$/.exec(line.trim()); return match?.groups ? { name: match.groups.name, revision: match.groups.revision, root: repoRoot, locked: match.groups.detail?.includes("locked") ?? false } : null; }).filter((workspace): workspace is JjWorkspace => workspace !== null);
+}
+
+export function createBuiltinJjClient(input: { projectRoot: string; run: CommandRunner }) {
+  return { async snapshot() {
+    const [root, status, log, operations, bookmarks, workspaces] = await Promise.all([
+      input.run(command(input.projectRoot, ["root"])), input.run(command(input.projectRoot, ["status"])), input.run(command(input.projectRoot, ["log", "-r", "::", "-n", "40", "-G", "-T", 'change_id ++ "\\t" ++ commit_id ++ "\\t" ++ description.first_line() ++ "\\t" ++ author.email() ++ "\\n"'])), input.run(command(input.projectRoot, ["op", "log", "-n", "20", "-G", "-T", 'id ++ "\\t" ++ description.first_line() ++ "\\t" ++ user ++ "\\t" ++ time.end() ++ "\\n"'])), input.run(command(input.projectRoot, ["bookmark", "list"])), input.run(command(input.projectRoot, ["workspace", "list"])),
+    ]);
+    const statusText = String(status);
+    const workingCopyLine = statusText.split("\n").find((line) => line.includes("Working copy") && line.includes("(@)"));
+    const workingCopyMatch = workingCopyLine ? /\(@\)\s*:\s*(\S+)\s+(.+)$/.exec(workingCopyLine) : null;
+    const repoRoot = String(root).trim();
+    return normalizeJjSnapshot({ repoRoot, workingCopy: { changeId: workingCopyMatch?.[1] ?? null, description: workingCopyMatch?.[2]?.trim() ?? "", empty: !statusText.includes("Working copy changes:"), conflicts: (statusText.match(/conflict/gi) ?? []).length }, changes: parseChangeGraph(String(log)), operations: parseOperations(String(operations)), bookmarks: parseBookmarks(String(bookmarks)), workspaces: parseWorkspaces(String(workspaces), repoRoot) });
+  } };
+}
