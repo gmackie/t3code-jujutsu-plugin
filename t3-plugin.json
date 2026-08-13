@@ -3,7 +3,7 @@
   "id": "com.t3code.jujutsu",
   "displayName": "Jujutsu",
   "version": "0.1.0",
-  "runtime": { "kind": "managed-app", "command": ["t3code-jujutsu-plugin"], "restart": "on-failure" },
+  "runtime": { "kind": "managed-app", "command":["bun","src/stdio.ts"], "restart": "on-failure" },
   "contributes": {
     "navigation": [
       { "id": "jujutsu.command-center", "title": "Jujutsu", "path": "/" },
