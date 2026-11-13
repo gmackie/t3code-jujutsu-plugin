@@ -1,5 +1,5 @@
 import { expect, it } from "bun:test";
-import { chmod, mkdtemp, rm, writeFile } from "node:fs/promises";
+import { chmod, mkdir, mkdtemp, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { Client } from "@modelcontextprotocol/client";
@@ -75,5 +75,39 @@ it.skipIf(!jjInstalled)("reads and changes a real jj repository", async () => {
   } finally {
     await client.close();
     await rm(repo, { recursive: true, force: true });
+  }
+});
+
+it.skipIf(!jjInstalled)("reports repository-relative conflicted paths when launched from another directory", async () => {
+  const repo = await mkdtemp(join(tmpdir(), "jujutsu-conflict-"));
+  const elsewhere = await mkdtemp(join(tmpdir(), "jujutsu-cwd-"));
+  const env = { HOME: repo, JJ_USER: "Test", JJ_EMAIL: "test@example.com", JJ_CONFIG: join(repo, "jj-config.toml") };
+  await writeFile(env.JJ_CONFIG, "");
+  const jj = (...args: string[]) => Bun.spawnSync(["jj", ...args], { cwd: repo, env: { ...process.env, ...env }, stdout: "pipe", stderr: "pipe" });
+  const longDir = join(repo, "a-rather-long-directory-name", "nested-deeper-still");
+  expect(jj("git", "init").exitCode).toBe(0);
+  await mkdir(longDir, { recursive: true });
+  await writeFile(join(repo, "a.txt"), "base\n");
+  await writeFile(join(longDir, "long-file-name-for-padding.txt"), "base\n");
+  expect(jj("bookmark", "create", "-r", "@", "base").exitCode).toBe(0);
+  expect(jj("new", "base").exitCode).toBe(0);
+  await writeFile(join(repo, "a.txt"), "left\n");
+  await writeFile(join(longDir, "long-file-name-for-padding.txt"), "left\n");
+  expect(jj("bookmark", "create", "-r", "@", "left").exitCode).toBe(0);
+  expect(jj("new", "base").exitCode).toBe(0);
+  await writeFile(join(repo, "a.txt"), "right\n");
+  await writeFile(join(longDir, "long-file-name-for-padding.txt"), "right\n");
+  expect(jj("bookmark", "create", "-r", "@", "right").exitCode).toBe(0);
+  expect(jj("new", "left", "right").exitCode).toBe(0);
+  const client = await launch(elsewhere, { ...env, JJ_PROJECT_ROOT: repo });
+  try {
+    const result = (await client.callTool({ name: "jj_snapshot", arguments: {} })) as { isError?: boolean; content: { text: string }[]; structuredContent: { snapshot: { conflictedPaths: string[]; workingCopy: { conflicts: number } } } };
+    expect(result.isError).toBeFalsy();
+    expect([...result.structuredContent.snapshot.conflictedPaths].sort()).toEqual(["a-rather-long-directory-name/nested-deeper-still/long-file-name-for-padding.txt", "a.txt"]);
+    expect(result.structuredContent.snapshot.workingCopy.conflicts).toBe(2);
+  } finally {
+    await client.close();
+    await rm(repo, { recursive: true, force: true });
+    await rm(elsewhere, { recursive: true, force: true });
   }
 });

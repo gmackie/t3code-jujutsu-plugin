@@ -41,6 +41,8 @@ describe("Jujutsu adapter", () => {
     expect(parseOperations("op1\tsnapshot working copy\tme@host\t2026-11-13T14:50:39-06:00\n")).toEqual([{ id: "op1", description: "snapshot working copy", user: "me@host", timestamp: "2026-11-13T14:50:39-06:00" }]);
     expect(parseBookmarks("main\t\t0\txxww\nmain\torigin\t0\txxww\nsplit\t\t1\t\n")).toEqual([{ name: "main", target: "xxww", diverged: false }, { name: "split", target: "", diverged: true }]);
     expect(parseConflictedPaths("a.txt    2-sided conflict\ndir/b c.ts    3-sided conflict\n")).toEqual(["a.txt", "dir/b c.ts"]);
+    // Long paths get a single space before the suffix.
+    expect(parseConflictedPaths("some/very/long/directory/name/file.txt 2-sided conflict\nx.bin    2-sided conflict including an executable\n")).toEqual(["some/very/long/directory/name/file.txt", "x.bin"]);
   });
 
   test("collects a snapshot from native JJ commands", async () => {
@@ -60,6 +62,8 @@ describe("Jujutsu adapter", () => {
     expect(jj.commands.slice(1).every((command) => command.includes("--ignore-working-copy"))).toBe(true);
     expect(jj.commands.map(subcommand).sort()).toEqual(["bookmark list", "log", "log", "op log", "resolve", "root", "workspace list"]);
     expect(jj.commands.every((command) => command[1] === "--repository=/work/project")).toBe(true);
+    // jj prints paths relative to the process cwd, so every command runs in the repository.
+    expect(jj.cwds.every((cwd) => cwd === "/work/project")).toBe(true);
   });
 
   test("builds mutation commands that cannot smuggle flags", () => {

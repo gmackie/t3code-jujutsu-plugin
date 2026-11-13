@@ -10,13 +10,14 @@ const MAX_ERROR_CHARS = 300;
  */
 export function createJjRunner(options: { bin: string; timeoutMs?: number; cwd?: string }): CommandRunner {
   const timeoutMs = options.timeoutMs ?? DEFAULT_TIMEOUT_MS;
-  return async (command) => {
+  return async (command, call) => {
+    const cwd = call?.cwd ?? options.cwd;
     const argv = [options.bin, ...command.slice(1)];
     const subcommand = commandName(command);
     let child: ReturnType<typeof Bun.spawn>;
     try {
       child = Bun.spawn(argv, {
-        ...(options.cwd ? { cwd: options.cwd } : {}),
+        ...(cwd ? { cwd } : {}),
         stdin: "ignore",
         stdout: "pipe",
         stderr: "pipe",

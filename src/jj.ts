@@ -18,8 +18,12 @@ export type JjSnapshot = {
 export type JjStatus = "neutral" | "positive" | "warning" | "negative";
 export type JjSurfaceCard = { kind: "metric" | "list" | "notice"; id: string; title: string; value?: string; message?: string; status?: JjStatus; items?: readonly { id: string; title: string; detail?: string; status?: JjStatus }[] };
 export type JjSurfaceModel = { pluginId: string; title: string; refreshedAt: string; cards: readonly JjSurfaceCard[] };
-/** Runs a full argv (argv[0] is "jj") and resolves with stdout. */
-export type CommandRunner = (command: readonly string[]) => Promise<string>;
+/**
+ * Runs a full argv (argv[0] is "jj") and resolves with stdout. `cwd` is the
+ * repository root: jj prints paths (e.g. `resolve --list`) relative to the
+ * process cwd, not to `--repository`.
+ */
+export type CommandRunner = (command: readonly string[], options?: { cwd?: string }) => Promise<string>;
 
 function string(value: unknown, fallback = ""): string { return typeof value === "string" ? value : fallback; }
 function boolean(value: unknown, fallback = false): boolean { return typeof value === "boolean" ? value : fallback; }
@@ -128,13 +132,16 @@ export function parseWorkspaces(output: string): readonly JjWorkspace[] {
   });
 }
 
-/** `jj resolve --list` rows are `<path>    <n>-sided conflict`. */
+/**
+ * `jj resolve --list` rows are `<path> <n>-sided conflict[ including …]`; the
+ * padding before the suffix can be a single space for long paths.
+ */
 export function parseConflictedPaths(output: string): readonly string[] {
-  return lines(output).map((line) => line.replace(/\s{2,}\S.*$/, "").trim()).filter(Boolean);
+  return lines(output).map((line) => line.replace(/\s+\d+-sided conflict\b.*$/, "").trim()).filter(Boolean);
 }
 
 export function createBuiltinJjClient(input: { projectRoot: string; run: CommandRunner; changeLimit?: number }) {
-  const at = (args: readonly string[], ignoreWorkingCopy = true) => input.run(jjCommand(input.projectRoot, args, { ignoreWorkingCopy }));
+  const at = (args: readonly string[], ignoreWorkingCopy = true) => input.run(jjCommand(input.projectRoot, args, { ignoreWorkingCopy }), { cwd: input.projectRoot });
   return {
     async snapshot(): Promise<JjSnapshot> {
       // The first command snapshots the working copy; the rest read that

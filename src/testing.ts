@@ -29,9 +29,11 @@ const WORKING_COPY = "zzyy\tDraft <feature>\t0\t1\n";
 
 export function fakeJj(overrides: { fail?: (command: readonly string[]) => Error | undefined } = {}) {
   const commands: string[][] = [];
+  const cwds: (string | undefined)[] = [];
   const mutations: string[][] = [];
-  const run: CommandRunner = async (command) => {
+  const run: CommandRunner = async (command, options) => {
     commands.push([...command]);
+    cwds.push(options?.cwd);
     const failure = overrides.fail?.(command);
     if (failure) throw failure;
     const name = subcommand(command);
@@ -41,7 +43,7 @@ export function fakeJj(overrides: { fail?: (command: readonly string[]) => Error
     mutations.push(command.slice(1).filter((arg) => !arg.startsWith("--repository=") && arg !== "--no-pager" && arg !== "--color=never"));
     return "";
   };
-  return { run, commands, mutations };
+  return { run, commands, cwds, mutations };
 }
 
 export async function connectedClient(options: { config?: Partial<JujutsuConfig>; run?: CommandRunner } = {}) {

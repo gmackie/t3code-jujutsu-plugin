@@ -74,7 +74,7 @@ export function createJujutsuMcpServer(options: JujutsuServerOptions): McpServer
       if (!options.config.mutationsEnabled) throw new Error("Changes from Jujutsu panels are disabled. Set JJ_MUTATIONS=enabled in the plugin's settings to allow them.");
       const mutation = toMutation();
       const repo = resolveRoot(path);
-      await options.run(jjCommand(repo, mutationArgs(mutation)));
+      await options.run(jjCommand(repo, mutationArgs(mutation)), { cwd: repo });
       const done = describeMutation(mutation);
       try {
         return { data: { ...(await snapshotData(repo)), done }, text: done };
