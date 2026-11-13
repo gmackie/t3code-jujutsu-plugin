@@ -1,36 +1,115 @@
 {
-  "schemaVersion": 1,
+  "schemaVersion": 2,
   "id": "com.t3code.jujutsu",
   "displayName": "Jujutsu",
-  "version": "0.1.0",
-  "runtime": { "kind": "managed-app", "command":["bun","src/stdio.ts"], "restart": "on-failure" },
-  "contributes": {
-    "navigation": [
-      { "id": "jujutsu.command-center", "title": "Jujutsu", "path": "/" },
-      { "id": "jujutsu.change-graph", "title": "Change graph", "path": "/changes" },
-      { "id": "jujutsu.operation-log", "title": "Operation log", "path": "/operations" },
-      { "id": "jujutsu.bookmarks", "title": "Bookmarks", "path": "/bookmarks" },
-      { "id": "jujutsu.workspaces", "title": "Workspaces", "path": "/workspaces" },
-      { "id": "jujutsu.conflicts", "title": "Conflicts", "path": "/conflicts" }
-    ],
-    "panels": [
-      { "id": "jujutsu.command-center", "title": "Jujutsu command center", "surface": "project" },
-      { "id": "jujutsu.change-graph", "title": "Change graph", "surface": "project" },
-      { "id": "jujutsu.operation-log", "title": "Operation log", "surface": "project" },
-      { "id": "jujutsu.bookmarks", "title": "Bookmarks", "surface": "project" },
-      { "id": "jujutsu.workspaces", "title": "Workspaces", "surface": "project" },
-      { "id": "jujutsu.conflicts", "title": "Conflicts", "surface": "thread.sidePanel" }
-    ],
-    "settings": [
-      { "id": "jujutsu.project-root", "title": "Project root", "scope": "project", "field": { "kind": "text" } },
-      { "id": "jujutsu.polling-seconds", "title": "Refresh interval", "scope": "server", "field": { "kind": "number", "default": 30, "min": 10, "max": 3600, "step": 10 } }
-    ],
-    "settingsPanels": [{ "id": "jujutsu.connection", "title": "Jujutsu", "description": "Observe Jujutsu repositories through a dedicated change graph and operation cockpit.", "settingIds": ["jujutsu.project-root", "jujutsu.polling-seconds"] }],
-    "hooks": ["project.opened", "project.changed", "runtime.error"]
+  "version": "0.2.0",
+  "description": "Change graph, operation log, bookmarks, workspaces and conflicts for Jujutsu repositories, read from the local jj CLI.",
+  "mcpServer": {
+    "name": "jujutsu",
+    "transport": {
+      "type": "stdio",
+      "command": "bun",
+      "args": [
+        "${pluginRoot}/src/mcp.ts"
+      ],
+      "env": [
+        {
+          "name": "JJ_PROJECT_ROOT",
+          "value": "",
+          "title": "Project root",
+          "description": "Optional absolute path of the repository to read when a tool call or panel gives none. Defaults to the process working directory."
+        },
+        {
+          "name": "JJ_BIN",
+          "value": "jj",
+          "title": "jj executable",
+          "description": "Command name or absolute path of the Jujutsu CLI."
+        },
+        {
+          "name": "JJ_POLL_SECONDS",
+          "value": "30",
+          "title": "Refresh interval in seconds (10-3600)"
+        },
+        {
+          "name": "JJ_MUTATIONS",
+          "value": "disabled",
+          "title": "Changes from panels (enabled/disabled)",
+          "description": "Set to enabled to let panels describe, squash, abandon and rebase changes and create bookmarks. Agents never get these tools."
+        }
+      ]
+    }
   },
-  "capabilities": [
-    { "kind": "filesystem.read", "roots": ["project.root"] },
-    { "kind": "filesystem.write", "roots": ["project.root"] },
-    { "kind": "ui.embed", "surfaces": ["project", "thread.sidePanel"] }
-  ]
+  "contributes": {
+    "panels": [
+      {
+        "id": "jujutsu-command-center",
+        "title": "Jujutsu",
+        "scope": "project",
+        "resourceUri": "ui://jujutsu/command-center.html"
+      },
+      {
+        "id": "jujutsu-change-graph",
+        "title": "Change graph",
+        "scope": "project",
+        "resourceUri": "ui://jujutsu/change-graph.html"
+      },
+      {
+        "id": "jujutsu-operation-log",
+        "title": "Operation log",
+        "scope": "project",
+        "resourceUri": "ui://jujutsu/operation-log.html"
+      },
+      {
+        "id": "jujutsu-bookmarks",
+        "title": "Bookmarks",
+        "scope": "project",
+        "resourceUri": "ui://jujutsu/bookmarks.html"
+      },
+      {
+        "id": "jujutsu-workspaces",
+        "title": "Workspaces",
+        "scope": "project",
+        "resourceUri": "ui://jujutsu/workspaces.html"
+      },
+      {
+        "id": "jujutsu-conflicts",
+        "title": "Conflicts",
+        "scope": "thread",
+        "resourceUri": "ui://jujutsu/conflicts.html"
+      }
+    ],
+    "commands": [
+      {
+        "id": "jujutsu-open-command-center",
+        "title": "Jujutsu: Open command center",
+        "panel": "jujutsu-command-center"
+      },
+      {
+        "id": "jujutsu-open-change-graph",
+        "title": "Jujutsu: Open change graph",
+        "panel": "jujutsu-change-graph"
+      },
+      {
+        "id": "jujutsu-open-operation-log",
+        "title": "Jujutsu: Open operation log",
+        "panel": "jujutsu-operation-log"
+      },
+      {
+        "id": "jujutsu-open-bookmarks",
+        "title": "Jujutsu: Open bookmarks",
+        "panel": "jujutsu-bookmarks"
+      },
+      {
+        "id": "jujutsu-open-workspaces",
+        "title": "Jujutsu: Open workspaces",
+        "panel": "jujutsu-workspaces"
+      },
+      {
+        "id": "jujutsu-open-conflicts",
+        "title": "Jujutsu: Open conflicts for this thread",
+        "panel": "jujutsu-conflicts"
+      }
+    ]
+  },
+  "t3Tools": []
 }
